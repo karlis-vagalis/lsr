@@ -1,10 +1,39 @@
 {
   "name": "@karlis-vagalis/lsr",
   "version": "0.1.0",
-  "module": "src/cli.ts",
+  "description": "Local semantic search over plugin sources (files, Papra, email) with EmbeddingGemma 2 — a `lsr` CLI + localhost HTTP daemon.",
   "type": "module",
+  "module": "src/cli.ts",
   "bin": {
     "lsr": "./src/cli.ts"
+  },
+  "files": [
+    "src",
+    "plugins",
+    "examples",
+    "lsr.config.yaml.example",
+    "README.md"
+  ],
+  "engines": {
+    "bun": ">=1.1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/karlis-vagalis/lsr.git"
+  },
+  "keywords": [
+    "semantic-search",
+    "embedding",
+    "embeddings",
+    "rag",
+    "embeddings-gemma",
+    "local",
+    "sqlite",
+    "cli"
+  ],
+  "license": "MIT",
+  "publishConfig": {
+    "access": "public"
   },
   "scripts": {
     "serve": "bun run src/cli.ts serve",
@@ -18,6 +47,7 @@
   },
   "dependencies": {
     "@huggingface/transformers": "^4.3.1",
+    "citty": "^0.2.2",
     "yaml": "^2.9.1",
     "zod": "^4.6.5"
   },

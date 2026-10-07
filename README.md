@@ -21,12 +21,25 @@ himalaya email ──▶   └────────────────�
 (poll CLI: --json)
 ```
 
+## Install
+
+Requires [Bun](https://bun.sh) >= 1.1.
+
+```bash
+# from the repo
+bun link                 # makes `lsr` available globally (dev)
+
+# or once published
+npm i -g @karlis-vagalis/lsr
+```
+
+Then use the `lsr` command directly (`lsr --help`).
+
 ## Setup
 
 ```bash
-bun install
-bun run src/cli.ts env            # print a sample config
-cp <sample> lsr.config.yaml       # then edit
+lsr env                       # print a sample config
+cp <sample> lsr.config.yaml   # then edit
 ```
 
 A `lsr.config.yaml` looks like. Any configured source names the plugin that built it;
@@ -65,32 +78,34 @@ search:
 Or build it up with the CLI (writes/updates the YAML):
 
 ```bash
-bun run src/cli.ts add folder --name=notes --path=~/Documents/notes --pattern="**/*.md"
-bun run src/cli.ts add papra --name=home --url=http://localhost:8787 --key=<key>
-bun run src/cli.ts add himalaya --name=work --mailbox=INBOX --limit=200
-bun run src/cli.ts plugins       # see every registered plugin + its config schema
+lsr add folder --name=notes --path=~/Documents/notes --pattern="**/*.md"
+lsr add papra --name=home --url=http://localhost:8787 --api-key=<key>
+lsr add himalaya --name=work --mailbox=INBOX --limit=200
+lsr plugins       # see every registered plugin + its config schema
 ```
 
 **Prereqs:** Bun; Papra API key (`documents:read`) if you index Papra; the **himalaya CLI**
 (`cargo install himalaya` or release binary) with an account configured via the `himalaya`
 wizard, if you index email.
-```
 
 ## Usage
 
 ```bash
-bun run src/cli.ts serve                                  # daemon: poll + HTTP :4747 (+ webhook)
-bun run src/cli.ts reindex                                # one full pass, then exit
-bun run src/cli.ts search "annual budget report"          # top-10 across all sources
-bun run src/cli.ts search "docker error" --source=papra:home   # filter by source
-bun run src/cli.ts search "meeting follow-up" --source=himalaya:work
-bun run src/cli.ts search "bake bread" --k=3
-bun run src/cli.ts status                                 # per-source index stats
-bun run src/cli.ts sources                                # list configured sources
-bun run src/cli.ts plugins                                # list registered plugins
+lsr serve                                  # daemon: poll + HTTP :4747 (+ webhook)
+lsr reindex                                # one full sync pass, then exit
+lsr search "annual budget report"          # top-10 across all sources
+lsr search "docker error" --source=papra:home   # filter by source
+lsr search "meeting follow-up" --source=himalaya:work
+lsr search "bake bread" --k=3
+lsr status                                 # per-source index stats
+lsr sources                                # list configured sources
+lsr plugins                                # list registered plugins
+lsr version
 ```
 
-Every command accepts `--config=PATH` (or `$LSR_CONFIG`) for multiple configs/instances.
+Every command accepts `--config=PATH` (short: `-c`) or `$LSR_CONFIG` for multiple
+configs/instances. **Cmd options go after the command**: `lsr search "q" --config=…`
+(citty-style).
 
 ## HTTP API (localhost)
 
@@ -107,11 +122,12 @@ Note: URL-encode query values (`?q=hello%20world`).
 
 ```
 src/
-  cli.ts        serve | reindex | search | status | sources | plugins | add | env
-  config.ts     lsr.config.yaml parser (Zod-validated, plugin schema-driven) + `add`
+  cli.ts        serve | reindex | search | status | sources | plugins | add | service | env
+  config.ts     lsr.config.yaml parser (Zod + plugin schema-driven) + `add`
   domain.ts     semantic types (Embedding[768], UpdatedAt, Ref, SourceId, Similarity)
   plugin.ts     source-plugin SDK (Zod config schema + createSources + matchWebhook)
   registry.ts   PluginRegistry — loads plugins/*/index.ts, registers all by default
+  service.ts    systemd unit generation + install/uninstall/status
   types.ts      Source interface + registry-driven buildSources()
   store.ts      multi-source sqlite vector store (brute-force cosine)
   embed.ts      EmbeddingGemma 2 via @huggingface/transformers (returns Embedding[768])
@@ -193,12 +209,18 @@ These are compile-time brands backed by guard constructors — see `domain.ts`.
 
 ## Run as a service (systemd)
 
-Copy `examples/lsr.service`, adjust `User=`, path and `Environment=`, then:
+Install, start and auto-enable the daemon (a user unit by default):
 
 ```bash
-sudo systemctl daemon-reload && sudo systemctl enable --now lsr
-journalctl -u lsr -f
+lsr service install --config=/absolute/path/to/lsr.config.yaml   # --system for root
+lsr service status              # inspect
+lsr service uninstall           # stop + remove
 ```
+
+It writes a hardened unit (`ExecStart=<bun> <entry> serve` with `LSR_CONFIG` set,
+`NoNewPrivileges`, `PrivateTmp`, `ProtectSystem`) and runs `systemctl --user daemon-reload`
++ `enable --now`. Logs: `journalctl --user -u lsr -f`. To run as root add `--system`
+(requires sudo). See `examples/lsr.service` for a hand-edited template.
 
 ## License
 MIT (this tool). It talks only to Papra's public REST/webhook API and does not modify or
