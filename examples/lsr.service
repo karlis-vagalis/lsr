@@ -1,0 +1,19 @@
+[Unit]
+Description=lsr local semantic search daemon (EmbeddingGemma 2)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=YOUR_USER
+WorkingDirectory=/home/YOUR_USER/lsr
+Environment=LSR_CONFIG=/home/YOUR_USER/lsr/lsr.config.yaml
+ExecStart=/usr/local/bin/bun run src/cli.ts serve
+Restart=on-failure
+RestartSec=10
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+
+[Install]
+WantedBy=multi-user.target

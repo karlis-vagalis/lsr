@@ -1,0 +1,26 @@
+sources:
+  - plugin: folder
+    name: notes
+    path: ~/Documents/notes
+    pattern: "**/*.md"
+  - plugin: papra
+    name: home
+    url: http://localhost:8787
+    apiKey: replace-me
+    # organizationId: home-org-id
+    # webhookSecret: signature-secret   # per-source (optional)
+  - plugin: himalaya
+    name: work
+    # account: work
+    # mailbox: INBOX
+    # limit: 200
+search:
+  model: onnx-community/embeddinggemma-2-ONNX
+  dtype: q4
+  dbPath: ./lsr.sqlite
+  host: 127.0.0.1
+  port: 4747
+  pollInterval: 60
+  chunkChars: 1800
+  chunkOverlap: 120
+  # webhookSecret: shared-secret   # shared fallback for all plugins
