@@ -2,7 +2,7 @@ import type { Config } from "./config";
 import type { Ref, SourceId } from "./domain";
 import { chunkText, embedTexts } from "./embed";
 import type { VectorStore } from "./store";
-import type { SearchHit, Source, SourceItem } from "./types";
+import type { SearchHit, Source } from "./types";
 
 export type SyncSummary = {
 	source: string;
@@ -23,7 +23,7 @@ export async function syncSource(
 		updated: 0,
 		removed: 0,
 	};
-	let items: SourceItem[];
+	let items: Awaited<ReturnType<Source["list"]>>;
 	try {
 		items = await source.list();
 	} catch (err) {
@@ -35,27 +35,49 @@ export async function syncSource(
 	}
 
 	const active = new Set<Ref>();
-	const toIndex: { item: SourceItem; content: string }[] = [];
+	const isTty = !!process.stdout.isTTY;
+	const total = items.length;
+	let done = 0;
+	let chunksDone = 0;
+	const started = Date.now();
+	let lastMs = started;
 
-	for (const item of items) {
-		active.add(item.ref);
-		if (store.lastIndexed(source.id, item.ref) === item.updatedAt) continue;
-		try {
-			const got = await source.getContent(item.ref);
-			if (!got) {
-				// no text yet (async extraction / binary): don't mark, retry next pass
-				continue;
-			}
-			toIndex.push({ item, content: got.text });
-		} catch (err) {
-			console.error(
-				`[${source.id}] content failed for ${item.ref}:`,
-				(err as Error).message,
+	const progress = (label: string) => {
+		const now = Date.now();
+		const rate = done > 0 ? ((now - lastMs) / 1000).toFixed(1) : "-";
+		if (isTty) {
+			process.stdout.write(
+				`\r\x1b[K[${source.id}] ${done}/${total} files · ${chunksDone} chunks · ~${rate}s/file`,
+			);
+		} else {
+			console.log(
+				`[${source.id}] ${done}/${total} files · ${chunksDone} chunks ${label}`,
 			);
 		}
-	}
+		lastMs = now;
+	};
 
-	for (const { item, content } of toIndex) {
+	for (const item of items) {
+		done += 1;
+		active.add(item.ref);
+		if (store.lastIndexed(source.id, item.ref) === item.updatedAt) continue;
+		// Free extraneous memory between files so long reindexes stay flat.
+		(globalThis as { Bun?: { gc: (b: boolean) => void } }).Bun?.gc(true);
+		let content: string | undefined;
+		try {
+			content = (await source.getContent(item.ref))?.text;
+		} catch (err) {
+			console.error(
+				`\n[${source.id}] content failed for ${item.ref}:`,
+				(err as Error).message,
+			);
+			continue;
+		}
+		if (!content) {
+			// no text yet (async extraction / binary): don't mark, retry next pass
+			continue;
+		}
+
 		const existed = store.lastIndexed(source.id, item.ref) !== null;
 		const chunks = chunkText(
 			content,
@@ -66,6 +88,7 @@ export async function syncSource(
 			store.markIndexed(source.id, item.ref, item.updatedAt); // empty text, stop retrying
 			if (existed) summary.updated += 1;
 			else summary.indexed += 1;
+			progress("");
 			continue;
 		}
 		const vec = await embedTexts(cfg, chunks);
@@ -79,9 +102,12 @@ export async function syncSource(
 			},
 			chunks.map((text, i) => ({ text, vec: vec[i] })),
 		);
+		chunksDone += chunks.length;
 		if (existed) summary.updated += 1;
 		else summary.indexed += 1;
+		progress("");
 	}
+	if (isTty) process.stdout.write("\r\x1b[K");
 
 	// Drop refs that vanished from this source (deleted/trashed/renamed files)
 	const referenced = store.referencedIds(source.id);
